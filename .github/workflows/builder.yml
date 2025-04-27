@@ -1,0 +1,151 @@
+name: Build x-watcher and config_watcher for Android ARM64 and ARM32
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Check out the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install Java (for SDK/NDK tools)
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Install Android NDK
+      - name: Install Android NDK
+        run: |
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O sdk-tools.zip
+          unzip -q sdk-tools.zip -d android-sdk
+          export ANDROID_HOME=$PWD/android-sdk
+          export PATH=$ANDROID_HOME/cmdline-tools/bin:$PATH
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "ndk;26.1.10909125"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+      # Create config_watcher.c
+      - name: Create config_watcher.c
+        run: |
+          cat << 'EOF' > config_watcher.c
+          #include "x-watcher.h"
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+
+          #define SIGNAL_FILE "/data/adb/copg_config_updated"
+
+          void config_changed_callback(XWATCHER_FILE_EVENT event, const char *path, int context, void *additional_data) {
+              if (event == XWATCHER_FILE_MODIFIED || event == XWATCHER_FILE_CREATED) {
+                  FILE *fp = fopen(SIGNAL_FILE, "w");
+                  if (fp) {
+                      fprintf(fp, "1");
+                      fclose(fp);
+                      system("chmod 644 " SIGNAL_FILE);
+                      system("sync");
+                      printf("Config file %s modified, signaled shell script\n", path);
+                  } else {
+                      fprintf(stderr, "Failed to write to signal file: %s\n", strerror(errno));
+                  }
+              }
+          }
+
+          int main() {
+              x_watcher *watcher = xWatcher_create();
+              if (!watcher) {
+                  fprintf(stderr, "Failed to create watcher\n");
+                  return 1;
+              }
+
+              xWatcher_reference config_ref = {
+                  .path = "/data/adb/modules/COPG/config.json",
+                  .callback_func = config_changed_callback,
+                  .context = 1,
+                  .additional_data = NULL
+              };
+
+              if (!xWatcher_appendFile(watcher, &config_ref)) {
+                  fprintf(stderr, "Failed to add watcher for config.json\n");
+                  xWatcher_destroy(watcher);
+                  return 1;
+              }
+
+              printf("Monitoring %s for changes...\n", config_ref.path);
+              if (!xWatcher_start(watcher)) {
+                  fprintf(stderr, "Failed to start watcher\n");
+                  xWatcher_destroy(watcher);
+                  return 1;
+              }
+
+              while (1) {
+                  sleep(1);
+              }
+
+              xWatcher_destroy(watcher);
+              return 0;
+          }
+          EOF
+
+      # Build for ARM64 (arm64-v8a)
+      - name: Build for ARM64
+        run: |
+          export NDK=$ANDROID_NDK_HOME
+          export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+          export TARGET=aarch64-linux-android
+          export API=21
+          export CC=$TOOLCHAIN/bin/${TARGET}${API}-clang
+          export CXX=$TOOLCHAIN/bin/${TARGET}${API}-clang++
+          export AR=$TOOLCHAIN/bin/llvm-ar
+          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+          export CFLAGS="-fPIC -O2 -DANDROID -I$NDK/sysroot/usr/include"
+          export LDFLAGS="-L$NDK/sysroot/usr/lib/aarch64-linux-android/$API -pthread"
+          mkdir -p build/arm64-v8a
+          # Compile x-watcher
+          $CC $CFLAGS -c x-watcher.c -o build/arm64-v8a/x-watcher.o
+          $AR rcs build/arm64-v8a/libx-watcher.a build/arm64-v8a/x-watcher.o
+          # Compile config_watcher
+          $CC $CFLAGS -c config_watcher.c -o build/arm64-v8a/config_watcher.o
+          $CC build/arm64-v8a/x-watcher.o build/arm64-v8a/config_watcher.o $LDFLAGS -o build/arm64-v8a/config_watcher
+
+      # Build for ARM32 (armeabi-v7a)
+      - name: Build for ARM32
+        run: |
+          export NDK=$ANDROID_NDK_HOME
+          export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+          export TARGET=armv7a-linux-androideabi
+          export API=21
+          export CC=$TOOLCHAIN/bin/${TARGET}${API}-clang
+          export CXX=$TOOLCHAIN/bin/${TARGET}${API}-clang++
+          export AR=$TOOLCHAIN/bin/llvm-ar
+          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+          export CFLAGS="-fPIC -O2 -DANDROID -I$NDK/sysroot/usr/include"
+          export LDFLAGS="-L$NDK/sysroot/usr/lib/arm-linux-androideabi/$API -pthread"
+          mkdir -p build/armeabi-v7a
+          # Compile x-watcher
+          $CC $CFLAGS -c x-watcher.c -o build/armeabi-v7a/x-watcher.o
+          $AR rcs build/armeabi-v7a/libx-watcher.a build/armeabi-v7a/x-watcher.o
+          # Compile config_watcher
+          $CC $CFLAGS -c config_watcher.c -o build/armeabi-v7a/config_watcher.o
+          $CC build/armeabi-v7a/x-watcher.o build/armeabi-v7a/config_watcher.o $LDFLAGS -o build/armeabi-v7a/config_watcher
+
+      # Upload artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-watcher-libs-and-binaries
+          path: |
+            build/arm64-v8a/libx-watcher.a
+            build/armeabi-v7a/libx-watcher.a
+            build/arm64-v8a/config_watcher
+            build/armeabi-v7a/config_watcher
+            x-watcher.h
