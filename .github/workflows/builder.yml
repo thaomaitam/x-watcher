@@ -1,4 +1,4 @@
-name: Build x-watcher and config_watcher for Android ARM64 and ARM32
+name: Build config_watcher for Android ARM64 and ARM32
 
 on:
   push:
@@ -96,6 +96,86 @@ jobs:
           }
           EOF
 
+      # Create array.h
+      - name: Create array.h
+        run: |
+          cat << 'EOF' > array.h
+          #ifndef ARRAY_H
+          #define ARRAY_H
+
+          #include <string.h>
+          #include <stdlib.h>
+
+          struct _ArrayHeader {
+             size_t count, capacity;
+          };
+
+          #define ARRAY_INITIAL_SIZE 8
+
+          #define _arr_header(a) ((struct _ArrayHeader*)(a) - 1)
+
+          #define arr_init(a) arr_init_n((a), ARRAY_INITIAL_SIZE)
+
+          #define arr_init_n(a, n) do { \
+             struct _ArrayHeader *header; \
+             header = malloc(sizeof(*header) + (sizeof(*(a)) * (n))); \
+             header->count    = 0; \
+             header->capacity = (n); \
+             (a) = (void*)(header + 1); \
+          } while(0)
+
+          #define arr_count(a)    (_arr_header(a)->count)
+          #define arr_capacity(a) (_arr_header(a)->capacity)
+
+          #define arr_back(a) ((a)[arr_count(a) - 1])
+          #define arr_pop(a)  ((a)[(_arr_header(a)->count--)-1])
+
+          #define arr_reserve(a, n) do { \
+             if(n <= arr_capacity(a)) break; \
+             struct _ArrayHeader *header = _arr_header(a); \
+             header->capacity = n; \
+             (a) = (void*)((struct _ArrayHeader*)realloc( \
+                header, sizeof(*header) + (sizeof(*(a)) * (n))) + 1); \
+          } while(0)
+
+          #define arr_resize(a, n) do { \
+             arr_reserve((a), (n)); \
+             _arr_header(a)->count = n; \
+          } while(0)
+
+          #define arr_resize_zero(a, n) do { \
+             size_t initial_count = arr_count(a); \
+             arr_resize((a), (n)); \
+             if(arr_count(a) > initial_count) \
+                memset( \
+                   &(a)[initial_count], 0, \
+                   (arr_count(a) - initial_count) * sizeof(*a)); \
+          } while(0)
+
+          #define arr_add(a, ...) do { \
+             struct _ArrayHeader *header = _arr_header(a); \
+             if(header->count == header->capacity) \
+                arr_reserve((a), header->capacity << 1); \
+             (a)[_arr_header(a)->count++] = (__VA_ARGS__); \
+          } while(0)
+
+          #define arr_free(a) do { \
+             free(_arr_header(a)); \
+          } while(0)
+
+          #define arr_find(a, val, idx) do { \
+             *idx = -1; \
+             for(size_t i = 0; i < arr_count((a)); i++) { \
+                if((a)[i] == val) { \
+                   *idx = i; \
+                   break; \
+                } \
+             } \
+          } while(0)
+
+          #endif
+          EOF
+
       # Build for ARM64 (arm64-v8a)
       - name: Build for ARM64
         run: |
@@ -108,14 +188,11 @@ jobs:
           export AR=$TOOLCHAIN/bin/llvm-ar
           export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
           export CFLAGS="-fPIC -O2 -DANDROID -I$NDK/sysroot/usr/include"
-          export LDFLAGS="-L$NDK/sysroot/usr/lib/aarch64-linux-android/$API -pthread"
+          export LDFLAGS="-L$NDK/sysroot/usr/lib/aarch64-linux-android/$API -pthread -llog"
           mkdir -p build/arm64-v8a
-          # Compile x-watcher
-          $CC $CFLAGS -c x-watcher.c -o build/arm64-v8a/x-watcher.o
-          $AR rcs build/arm64-v8a/libx-watcher.a build/arm64-v8a/x-watcher.o
           # Compile config_watcher
           $CC $CFLAGS -c config_watcher.c -o build/arm64-v8a/config_watcher.o
-          $CC build/arm64-v8a/x-watcher.o build/arm64-v8a/config_watcher.o $LDFLAGS -o build/arm64-v8a/config_watcher
+          $CC build/arm64-v8a/config_watcher.o $LDFLAGS -o build/arm64-v8a/config_watcher
 
       # Build for ARM32 (armeabi-v7a)
       - name: Build for ARM32
@@ -129,23 +206,19 @@ jobs:
           export AR=$TOOLCHAIN/bin/llvm-ar
           export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
           export CFLAGS="-fPIC -O2 -DANDROID -I$NDK/sysroot/usr/include"
-          export LDFLAGS="-L$NDK/sysroot/usr/lib/arm-linux-androideabi/$API -pthread"
+          export LDFLAGS="-L$NDK/sysroot/usr/lib/arm-linux-androideabi/$API -pthread -llog"
           mkdir -p build/armeabi-v7a
-          # Compile x-watcher
-          $CC $CFLAGS -c x-watcher.c -o build/armeabi-v7a/x-watcher.o
-          $AR rcs build/armeabi-v7a/libx-watcher.a build/armeabi-v7a/x-watcher.o
           # Compile config_watcher
           $CC $CFLAGS -c config_watcher.c -o build/armeabi-v7a/config_watcher.o
-          $CC build/armeabi-v7a/x-watcher.o build/armeabi-v7a/config_watcher.o $LDFLAGS -o build/armeabi-v7a/config_watcher
+          $CC build/armeabi-v7a/config_watcher.o $LDFLAGS -o build/armeabi-v7a/config_watcher
 
       # Upload artifacts
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: x-watcher-libs-and-binaries
+          name: config_watcher-binaries
           path: |
-            build/arm64-v8a/libx-watcher.a
-            build/armeabi-v7a/libx-watcher.a
             build/arm64-v8a/config_watcher
             build/armeabi-v7a/config_watcher
             x-watcher.h
+            array.h
