@@ -1,3 +1,6 @@
+i used this for COPG module so ignore config_watcher.c
+
+
 X-Watcher
 ---------
 
