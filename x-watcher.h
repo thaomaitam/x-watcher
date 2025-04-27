@@ -362,7 +362,7 @@ typedef struct x_watcher {
 						dir->callback_func(send_event,
 								dir->path,
 								dir->context,
-								dir->additional_data);
+								directory->additional_data);
 					}
 				}
 
@@ -776,7 +776,7 @@ static inline bool xWatcher_appendDir(
 					FILE_NOTIFY_CHANGE_FILE_NAME  |
 					FILE_NOTIFY_CHANGE_DIR_NAME   |
 					FILE_NOTIFY_CHANGE_LAST_WRITE,
-					NULL, &dir.overlapped, NULL);
+					NULL, &dir->overlapped, NULL);
 			if(!success) {
 				// get error code
 				DWORD error = GetLastError();
@@ -835,4 +835,3 @@ static inline void xWatcher_destroy(x_watcher *watcher) {
 }
 
 #endif
-
