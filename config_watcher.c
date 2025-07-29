@@ -4,7 +4,7 @@
 #include <string.h>
 #include <unistd.h> // For sleep
 
-#define SIGNAL_FILE "/data/adb/copg_config_updated"
+#define SIGNAL_FILE "/data/adb/ktaify_config_updated"
 
 void config_changed_callback(XWATCHER_FILE_EVENT event, const char *path, int context, void *additional_data) {
     if (event == XWATCHER_FILE_MODIFIED || event == XWATCHER_FILE_CREATED) {
@@ -31,7 +31,7 @@ int main() {
 
     // Define the file to watch
     xWatcher_reference config_ref = {
-        .path = "/data/adb/modules/COPG/config.json",
+        .path = "/data/adb/modules/KTAify/config.json",
         .callback_func = config_changed_callback,
         .context = 1,
         .additional_data = NULL
