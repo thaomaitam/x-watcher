@@ -31,7 +31,7 @@ int main() {
 
     // Define the file to watch
     xWatcher_reference config_ref = {
-        .path = "/data/adb/modules/KTAify/config.json",
+        .path = "/data/adb/modules/KTAify/ify.json",
         .callback_func = config_changed_callback,
         .context = 1,
         .additional_data = NULL
@@ -39,7 +39,7 @@ int main() {
 
     // Add the file watch
     if (!xWatcher_appendFile(watcher, &config_ref)) {
-        fprintf(stderr, "Failed to add watcher for config.json\n");
+        fprintf(stderr, "Failed to add watcher for ify.json\n");
         xWatcher_destroy(watcher);
         return 1;
     }
