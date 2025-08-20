@@ -4,7 +4,7 @@
 #include <string.h>
 #include <unistd.h> // For sleep
 
-#define SIGNAL_FILE "/data/adb/SpoofXManager/x-watcher/copg_config_updated"
+#define SIGNAL_FILE "/data/adb/SpoofXManager/x-watcher/SpoofXManager_config_updated"
 
 void config_changed_callback(XWATCHER_FILE_EVENT event, const char *path, int context, void *additional_data) {
     if (event == XWATCHER_FILE_MODIFIED || event == XWATCHER_FILE_CREATED) {
