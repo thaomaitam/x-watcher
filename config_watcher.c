@@ -4,7 +4,7 @@
 #include <string.h>
 #include <unistd.h> // For sleep
 
-#define SIGNAL_FILE "/data/adb/ktaify_config_updated"
+#define SIGNAL_FILE "/data/adb/SpoofXManager/x-watcher/copg_config_updated"
 
 void config_changed_callback(XWATCHER_FILE_EVENT event, const char *path, int context, void *additional_data) {
     if (event == XWATCHER_FILE_MODIFIED || event == XWATCHER_FILE_CREATED) {
@@ -31,7 +31,7 @@ int main() {
 
     // Define the file to watch
     xWatcher_reference config_ref = {
-        .path = "/data/adb/modules/KTAify/ify.json",
+        .path = "/data/adb/modules/SpoofXManager/config.json",
         .callback_func = config_changed_callback,
         .context = 1,
         .additional_data = NULL
@@ -39,7 +39,7 @@ int main() {
 
     // Add the file watch
     if (!xWatcher_appendFile(watcher, &config_ref)) {
-        fprintf(stderr, "Failed to add watcher for ify.json\n");
+        fprintf(stderr, "Failed to add watcher for config.json\n");
         xWatcher_destroy(watcher);
         return 1;
     }
